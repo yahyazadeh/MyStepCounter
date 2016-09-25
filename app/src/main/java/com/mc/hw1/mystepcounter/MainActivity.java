@@ -35,7 +35,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         mGyroscope = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
 
         // Start the SaveService thread
-        new Thread(new SaveService()).start();
+        new Thread(new SaveService(queue)).start();
+
+
+
     }
 
     public void startStop(View view) {

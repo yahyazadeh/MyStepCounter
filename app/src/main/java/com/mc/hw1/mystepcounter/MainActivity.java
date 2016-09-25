@@ -1,9 +1,12 @@
 package com.mc.hw1.mystepcounter;
 
+import android.content.Context;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.CountDownTimer;
+import android.os.PowerManager;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
@@ -14,31 +17,37 @@ import android.widget.Toast;
 import com.mc.hw1.mystepcounter.entities.CustomEvent;
 import com.mc.hw1.mystepcounter.services.SaveService;
 
+import java.math.BigInteger;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     private final BlockingQueue queue = new ArrayBlockingQueue(2048);
+    private PowerManager mPowerManager;
+    private PowerManager.WakeLock mWakeLock;
+    private TextView consoleTextView;
     private SensorManager mSensorManager;
     private Sensor mAccelerometer;
     private Sensor mGyroscope;
+    private Thread saveThread;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // Instantiate the power manager and create a WakeLock
+        mPowerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        mWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "myStepCounterTag");
+
+        // Instantiate the consoleTextView
+        consoleTextView = (TextView) findViewById(R.id.consoleText);
+
         //sensor variables
         mSensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
         mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         mGyroscope = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
-
-        // Start the SaveService thread
-        new Thread(new SaveService(queue)).start();
-
-
-
     }
 
     public void startStop(View view) {
@@ -59,10 +68,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 Toast.makeText(this, "Gyroscope doesn't exist", Toast.LENGTH_SHORT).show();
             }
 
+            // Start the SaveService thread
+            saveThread = new Thread(new SaveService(queue, getBaseContext()));
+            saveThread.start();
+            print("Saving to disk...");
+
 
         } else {
             button.setText("Start");
             mSensorManager.unregisterListener(this);
+            saveThread.interrupt();
+            print("Done!");
         }
     }
 
@@ -77,16 +93,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         //accelerometer sensor changed
         if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            float x = event.values[0];
-            float y = event.values[1];
-            float z = event.values[2];
-            long timestamp = event.timestamp;
-
             CustomEvent customEvent = new CustomEvent();
-            customEvent.setX(x);
-            customEvent.setY(y);
-            customEvent.setZ(z);
-            customEvent.setTimestamp(timestamp);
+            customEvent.setX(event.values[0]);
+            customEvent.setY(event.values[1]);
+            customEvent.setZ(event.values[2]);
+            customEvent.setTimestamp(event.timestamp);
             customEvent.setSensorType("A");
 
             try {
@@ -94,28 +105,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-
-            //showing data to view
-            TextView accX = (TextView) findViewById(R.id.accX);
-            TextView accY = (TextView) findViewById(R.id.accY);
-            TextView accZ = (TextView) findViewById(R.id.accZ);
-            accX.setText(Float.toString(x));
-            accY.setText(Float.toString(y));
-            accZ.setText(Float.toString(z));
         }
 
         //gyroscope sensor changed
         if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
-            float x = event.values[0];
-            float y = event.values[1];
-            float z = event.values[2];
-            long timestamp = event.timestamp;
-
             CustomEvent customEvent = new CustomEvent();
-            customEvent.setX(x);
-            customEvent.setY(y);
-            customEvent.setZ(z);
-            customEvent.setTimestamp(timestamp);
+            customEvent.setX(event.values[0]);
+            customEvent.setY(event.values[1]);
+            customEvent.setZ(event.values[2]);
+            customEvent.setTimestamp(event.timestamp);
             customEvent.setSensorType("G");
 
             try {
@@ -123,15 +121,26 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-
-            //showing data to view
-            TextView gyrX = (TextView) findViewById(R.id.gyrX);
-            TextView gyrY = (TextView) findViewById(R.id.gyrY);
-            TextView gyrZ = (TextView) findViewById(R.id.gyrZ);
-            gyrX.setText(Float.toString(x));
-            gyrY.setText(Float.toString(y));
-            gyrZ.setText(Float.toString(z));
         }
+
+    }
+
+    private void print(String msg) {
+        consoleTextView.setText(consoleTextView.getText().toString() + "\n " + msg);
+    }
+
+    // This is for keeping the CPU alive while the app is running
+    @Override
+    public void onStart() {
+        mWakeLock.acquire();
+        super.onStart();
+    }
+
+    // The app will release the WakeLock when it gets closed
+    @Override
+    public void onStop() {
+        mWakeLock.release();
+        super.onStop();
     }
 
 }

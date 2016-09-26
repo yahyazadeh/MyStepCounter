@@ -9,12 +9,12 @@ package com.mc.hw1.mystepcounter.services;
 import android.content.Context;
 import android.os.Environment;
 import android.util.Log;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.BlockingQueue;
@@ -26,12 +26,14 @@ public class SaveService implements Runnable {
 
     private Context mContext;
     private final BlockingQueue queue;
+    private final BlockingQueue pQueue;
     private CustomEvent customEvent = new CustomEvent();
     private FileWriter fWriter;
     private File myFile;
 
-    public SaveService(BlockingQueue q, Context mContext) {
+    public SaveService(BlockingQueue q, BlockingQueue p, Context mContext) {
         this.queue = q;
+        this.pQueue = p;
         this.mContext = mContext;
     }
 
@@ -50,7 +52,8 @@ public class SaveService implements Runnable {
 
         try {
             fWriter = new FileWriter(myFile);
-
+            boolean running = true;
+            int k = 0;
             while (true) {
                 customEvent = (CustomEvent) queue.take();
                 if (customEvent != null) {
@@ -67,6 +70,8 @@ public class SaveService implements Runnable {
                             + String.valueOf(z) + "\n";
 
                     fWriter.write(tuple);
+                    fWriter.flush();
+                    pQueue.put(customEvent);
                 }
             }
 
@@ -90,8 +95,8 @@ public class SaveService implements Runnable {
 
     private void terminate() {
         try {
-            fWriter.close();
             fWriter.flush();
+            fWriter.close();
         } catch (IOException e1) {
             e1.printStackTrace();
         }
